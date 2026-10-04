@@ -8,8 +8,15 @@ services:
       - "127.0.0.1:${ORDER_TRACKER_PORT:-8000}:8000"
     environment:
       ORDER_DB_PATH: /data/orders.db
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-order-tracker}
+      OTEL_ENV: ${OTEL_ENV:-production}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-0.1.0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
     volumes:
       - orders:/data
+    networks:
+      - default
+      - order-tracker-net 
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
@@ -25,3 +32,5 @@ networks:
     ipam:
       config:
         - subnet: ${ORDER_TRACKER_SUBNET:-10.215.24.0/24}
+  order-tracker-net:
+    external: true

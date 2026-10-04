@@ -1,0 +1,34 @@
+# Incident response service — Grafana webhook → Codex CLI
+#
+# Host networking lets the service reach Loki/Tempo/Prometheus on published
+# localhost ports. Codex is installed in the image and uses host authentication.
+services:
+  incident-response:
+    build: .
+    image: order-tracker-incident-response:local
+    network_mode: host
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # Allow bubblewrap user namespaces; Codex still enforces --sandbox read-only.
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      INCIDENT_DATA_DIR: /data/incidents
+      WORKSPACE_PATH: /workspace
+      LOKI_URL: http://127.0.0.1:3100
+      TEMPO_URL: http://127.0.0.1:3200
+      PROMETHEUS_URL: http://127.0.0.1:9090
+      GRAFANA_URL: http://127.0.0.1:3000
+      AGENT_BIN: codex
+      AGENT_SANDBOX: read-only
+      AGENT_TIMEOUT_SECONDS: "600"
+      ALERT_DEDUPE_SECONDS: "300"
+      HOME: /home/agent
+      CODEX_HOME: /home/agent/.codex-runtime
+    volumes:
+      - ../:/workspace:rw
+      - ./data:/data/incidents
+      - ${HOME}/.codex:/home/agent/.codex:ro
+    # Codex needs writable runtime state even with --ephemeral; auth stays read-only.
+    tmpfs:
+      - /home/agent/.codex-runtime:uid=${HOST_UID:-1000},gid=${HOST_GID:-1000},mode=0700
+    restart: unless-stopped

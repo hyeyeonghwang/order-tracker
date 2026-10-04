@@ -1,0 +1,93 @@
+name: observability
+
+# Incident response lives in ../incident-response (host network + Cursor agent).
+# Start with: docker compose -f observability/compose.yaml -f incident-response/compose.yaml up -d
+# Or from incident-response/: docker compose up -d --build
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+    depends_on:
+      - tempo
+      - loki
+    restart: unless-stopped
+    networks:
+      - order-tracker-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+    networks:
+      - order-tracker-net
+
+  loki:
+    image: grafana/loki:latest
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    restart: unless-stopped
+    networks:
+      - order-tracker-net
+
+  tempo:
+    image: grafana/tempo:latest
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+    ports:
+      - "127.0.0.1:3200:3200"
+    restart: unless-stopped
+    networks:
+      - order-tracker-net
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - ./grafana/alerting:/etc/grafana/provisioning/alerting:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+    networks:
+      - order-tracker-net
+
+volumes:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+
+networks:
+  default:
+    name: observability
+  order-tracker-net:
+    external: true
